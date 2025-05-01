@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lixeira Espacial</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: black;
+        }
+        canvas {
+            display: block;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            font-size: 20px;
+            font-family: Arial, sans-serif;
+        }
+        #gameOverScreen {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="score">Pontos: 0</div>
+    <div id="gameOverScreen">
+        <h1>Game Over</h1>
+        <button onclick="restartGame()">Jogar Novamente</button>
+        <button onclick="closeGame()">Fechar</button>
+    </div>
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        const scoreDisplay = document.getElementById("score");
+        const gameOverScreen = document.getElementById("gameOverScreen");
+        let score = 0;
+        let trashSpeed = 1;
+        let gameOver = false;
+
+        function showGameOver() {
+            gameOver = true;
+            gameOverScreen.style.display = "block";
+        }
+
+        function restartGame() {
+            location.reload();
+        }
+
+        function closeGame() {
+            window.close();
+        }
+
+        function updateScoreColor() {
+            let r = Math.floor(Math.random() * 256);
+            let g = Math.floor(Math.random() * 256);
+            let b = Math.floor(Math.random() * 256);
+            scoreDisplay.style.color = `rgb(${r},${g},${b})`;
+        }
+
+        setInterval(updateScoreColor, 500);
+
+        class Entity {
+            constructor(x, y, width, height, speed, imgSrc) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.speed = speed;
+                this.image = new Image();
+                if (imgSrc) this.image.src = imgSrc;
+            }
+            draw() {
+                if (this.image.src) {
+                    ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+                } else {
+                    ctx.fillStyle = "white";
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                }
+            }
+        }
+
+        class Player extends Entity {
+            constructor() {
+                super(canvas.width / 2 - 25, canvas.height - 60, 50, 50, 0, 'lixeira.png');
+            }
+        }
+
+        class Projectile extends Entity {
+            constructor(x, y) {
+                super(x, y, 5, 10, 5, null);
+            }
+            move() {
+                this.y -= this.speed;
+            }
+        }
+
+        class Trash extends Entity {
+            constructor(x, y) {
+                const randomImg = ['papel.png', 'vidro.png', 'plastico.png'][Math.floor(Math.random() * 3)];
+                super(x, y, 50, 50, trashSpeed, randomImg);
+            }
+            move() {
+                this.y += this.speed;
+            }
+        }
+
+        class Bomb extends Entity {
+            constructor(x, y) {
+                super(x, y, 50, 50, trashSpeed * 1.2, 'bomba.png');
+            }
+            move() {
+                this.y += this.speed;
+            }
+        }
+
+        const player = new Player();
+        const projectiles = [];
+        const trashItems = [];
+        const bombs = [];
+
+        function spawnTrash() {
+            trashItems.push(new Trash(Math.random() * (canvas.width - 30), 0));
+        }
+
+        function spawnBomb() {
+            bombs.push(new Bomb(Math.random() * (canvas.width - 40), 0));
+        }
+
+        function update() {
+            if (gameOver) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            player.draw();
+            
+            projectiles.forEach((proj, pIndex) => {
+                proj.move();
+                proj.draw();
+                if (proj.y < 0) projectiles.splice(pIndex, 1);
+            });
+            
+            trashItems.forEach((trash, tIndex) => {
+                trash.move();
+                trash.draw();
+                projectiles.forEach((proj, pIndex) => {
+                    if (
+                        proj.x < trash.x + trash.width &&
+                        proj.x + proj.width > trash.x &&
+                        proj.y < trash.y + trash.height &&
+                        proj.y + proj.height > trash.y
+                    ) {
+                        trashItems.splice(tIndex, 1);
+                        projectiles.splice(pIndex, 1);
+                        score += 10;
+                        scoreDisplay.textContent = `Pontos: ${score}`;
+                    }
+                });
+            });
+            
+            bombs.forEach((bomb, bIndex) => {
+                bomb.move();
+                bomb.draw();
+            });
+            
+            projectiles.forEach((proj, pIndex) => {
+                bombs.forEach((bomb, bIndex) => {
+                    if (
+                        proj.x < bomb.x + bomb.width &&
+                        proj.x + proj.width > bomb.x &&
+                        proj.y < bomb.y + bomb.height &&
+                        proj.y + proj.height > bomb.y
+                    ) {
+                        showGameOver();
+                    }
+                });
+            });
+            
+            trashSpeed += 0.0005;
+            requestAnimationFrame(update);
+        }
+
+        canvas.addEventListener("mousemove", (e) => {
+            player.x = e.clientX - player.width / 2;
+        });
+
+        canvas.addEventListener("mousedown", (e) => {
+            if (e.button === 0) {
+                projectiles.push(new Projectile(player.x + player.width / 2, player.y));
+            }
+        });
+
+        setInterval(spawnTrash, 1000);
+        setInterval(spawnBomb, 3000);
+        update();
+    </script>
+</body>
+</html>
